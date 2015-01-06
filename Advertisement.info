@@ -1,0 +1,7 @@
+name = "Advertisement"
+description = "Used to display simple advertisements in home page and product display page"
+package = "Advertisement"
+core = "7.x"
+
+dependencies[] = taxonomy
+dependencies[] = field

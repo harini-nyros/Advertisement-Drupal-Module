@@ -1,0 +1,309 @@
+<?php
+
+/**
+ * @file
+ * Advertisement module.
+ */
+
+function Advertisement_menu() {
+
+ $items['saveclicks'] = array(
+      'title'               => 'Hello World',
+      'page callback'       => '_Advertisement_page_callback',
+      'access arguments'    => array('content'),
+      'type'                => MENU_CALLBACK
+    );
+$items['admin/reports/advertisement_reports'] = array(
+    'title' => 'Advertisement Statistics',
+    'description' => 'Displayes the Advertisement Statistics',
+    'page callback' => 'Advertisement_get_Statistics',
+    'access arguments' => array('content'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 0,
+   );
+    return $items;
+}
+function Advertisement_get_Statistics()
+{
+	$header = array('<h6>Advertisement Title</h6>', '<h6>Clicks Count</h6>');
+	$results= db_query("SELECT * from {advertisement_clicks}");
+	foreach($results as $row) {
+
+	$node = node_load($row->nid);
+	 $rows[] = array(
+                    $node->title,
+                    $row->ccount,
+    		);
+	}
+	if(empty($rows))
+	{
+
+		$rows[]=array("NO Count"," to display");
+	}	
+	
+	$output = theme('table', array('header' => $header,
+                  	         'rows' => $rows));
+
+  # add the pager
+  $output .= theme('pager');
+	
+	
+  return $output;
+}
+function _Advertisement_page_callback($args) {
+ $ccount= db_query("SELECT ccount from {advertisement_clicks} WHERE nid = :nid LIMIT 1", array(":nid" =>$_POST['adid']))->fetchField();
+ if($ccount == '')
+ {
+	$insert = db_insert('advertisement_clicks')->fields(array('nid' => $_POST['adid'],'ccount' => '1'))->execute();
+	echo $insert;
+
+ }
+ else
+ {
+	$count=$ccount+1;
+	$update = db_update('advertisement_clicks')->fields(array('ccount' => $count))->condition('nid',$_POST['adid'])->execute();
+	echo $update;
+ }
+ exit;
+}
+function disable_content_type($type) {
+  $type_info = node_type_load($type);
+  $type_info->module = 'node';
+  $type_info->custom = 1;
+  $type_info->modified = 1;
+  $type_info->locked = 0;
+  $type_info->disabled = 1;
+  node_type_save($type_info);
+}
+/**
+ * Implements hook_block_info().
+ */
+function Advertisement_block_info() {
+    $blocks['Advertisement_block'] = array(
+        'info' => t('Advertisement'),
+        'cache' => DRUPAL_CACHE_PER_ROLE,
+    );
+    return $blocks;
+}
+/**
+ * Implements Advertisement_block_info_alter().
+ */
+function Advertisement_block_info_alter(&$blocks, $theme, $code_blocks) {
+    if (!path_is_admin(current_path())) {
+        if (isset($blocks['Advertisement']['Advertisement_block'])) {
+            $blocks['Advertisement']['Advertisement_block']['status'] = 1;
+            $blocks['Advertisement']['Advertisement_block']['region'] = 'sidebar_second';
+            $blocks['Advertisement']['Advertisement_block']['weight'] = 2;
+            $blocks['Advertisement']['Advertisement_block']['visibility'] = BLOCK_VISIBILITY_LISTED;
+            $blocks['Advertisement']['Advertisement_block']['pages'] = '<front>';
+        }
+    }
+}
+/**
+ * Implements hook_block_view().
+ */
+function Advertisement_block_view($delta = '') { 
+      $block['subject'] = t('');
+      $type = 'advertisement';
+      $query = db_select('node', 'n')->fields('n', array('nid'))->condition('type', $type)->condition('status', 1);
+      $nids = $query->execute()->fetchCol();
+      $nodes = node_load_multiple($nids);
+      $homepageterms = taxonomy_get_term_by_name('Home Page');
+      $first_term = array_shift($homepageterms);
+      $homepageid=$first_term->tid;
+      $plistingterms = taxonomy_get_term_by_name('Products Listing Page');
+      $listing_term = array_shift($plistingterms);
+      $plistingid=$listing_term->tid;
+      $pdetailsterms = taxonomy_get_term_by_name('Products Details page');
+      $details_term = array_shift($pdetailsterms);
+      $pdetailsid=$details_term->tid;
+      $doutput='';
+      $houtput='';
+      $loutput='';
+      foreach($nodes as $node)
+      {
+	
+	$node = node_load($node->nid);
+	$options = array('absolute' => TRUE);
+	$url = url('node/'.$node->nid,$options);
+	$startdate=$node->created;
+	$field = field_get_items('node', $node, 'field_ad_end_date');
+	if($field != '')
+        {
+	$enddate = $node->field_ad_end_date['und'][0]['value'];
+	if($node->field_ad_status['und'][0]['value'] == 1)
+        {
+		
+		$activedate= advertisement_date_diff($startdate,$enddate);
+		if($activedate != 0)
+		{
+			$spaceid = $node->field_ad_category['und'][0]['tid'];
+			if (strpos($url,'?q=') !== false) 
+			{
+				    $var=1;
+			}
+			else
+			{
+				   $var=0;
+			}
+			if($spaceid == $homepageid)
+			{
+	
+				$houtput.='<div><h1><a onclick="return saveclicks('.$node->nid.','.$var.');" href="'.$url.'">'.$node->title.'</a></h1>';
+				$field_image = field_get_items('node', $node, 'field_ad_image');
+				if($field_image != '')
+				{
+					
+				$houtput.='<img src="'.file_create_url($node->field_ad_image['und'][0]['uri']).'" width=150px,height=150px>';
+				}
+				$houtput.=$node->field_ad_text['und'][0]['value'];
+				$houtput.='</div>';
+
+			}
+			else if($spaceid == $plistingid)
+			{	
+					
+				$loutput.='<div><h1><a onclick="return saveclicks('.$node->nid.','.$var.');" href="'.$url.'">'.$node->title.'</a></h1>';
+				$field_image = field_get_items('node', $node, 'field_ad_image');
+				if($field_image != '')
+				{
+					
+				$loutput.='<img src="'.file_create_url($node->field_ad_image['und'][0]['uri']).'" width=150px,height=150px>';
+				}
+				$loutput.=$node->field_ad_text['und'][0]['value'];
+				$loutput.='</div>';
+			}
+			else if($spaceid == $pdetailsid)
+			{
+				$doutput.='<div><h1><a onclick="return saveclicks('.$node->nid.','.$var.');" href="'.$url.'">'.$node->title.'</a></h1>';
+				$field_image = field_get_items('node', $node, 'field_ad_image');
+				if($field_image != '')
+				{
+					
+				$doutput.='<img src="'.file_create_url($node->field_ad_image['und'][0]['uri']).'" width=150px,height=150px>';
+				}
+				$doutput.=$node->field_ad_text['und'][0]['value'];
+				$doutput.='</div>';
+
+			}
+		
+		}
+        }
+
+       }
+      }  
+		// End of for loop
+      
+      if (drupal_is_front_page()) 
+      {
+	
+	 $houtput.='<script>function saveclicks(nid,cleanurl)
+			{
+				if(cleanurl == 1)
+				{
+					url ="?q=saveclicks";
+				}
+				else
+				{
+					url="saveclicks";
+				}
+				jQuery.ajax({
+					  type: "POST",
+					  url: url,
+					  data: ({adid:nid}),
+					  success: function(data)
+					  {
+					  	return true;
+					   }
+					})
+			}</script>';
+	 $block['content'] =  $houtput;
+      }
+      else if(arg(0) == 'node' && is_numeric(arg(1))) 
+	{
+		
+	     $doutput.='<script type="text/javascript">
+			function saveclicks(nid,cleanurl)
+			{
+				if(cleanurl == 1)
+				{
+					url ="?q=helloworld";
+				}
+				else
+				{
+					url="helloworld";
+				}
+				jQuery.ajax({
+					  type: "POST",
+					  url: url,
+					  data: ({adid:nid}),
+					  success: function(data)
+					  {
+					
+					  	return true;
+					   }
+					})
+			}</script>';
+	     $block['content'] =  $doutput;
+   	   
+	  }
+        else if ((arg(0) == 'taxonomy') && (arg(1) == 'term')) 
+	{
+		
+		$loutput.='<script type="text/javascript">
+			function saveclicks(nid,cleanurl)
+			{
+				if(cleanurl == 1)
+				{
+					url ="?q=helloworld";
+				}
+				else
+				{
+					url="helloworld";
+				}
+				jQuery.ajax({
+					  type: "POST",
+					  url: url,
+					  data: ({adid:nid}),
+					  success: function(data)
+					  {
+					  	return true;
+					   }
+					})
+			}</script>';
+		$block['content'] =  $loutput;
+
+
+  	}
+    return $block;
+     
+}
+/**
+ * Helper function.
+ * Timestamp to days.
+ */
+function advertisement_date_diff($start_time,$end_time) 
+{
+ 
+  $ustart_time = $start_time;
+  $edate = str_replace('-','/', $end_time);
+  $uend_time = strtotime($edate);
+  $now = time();
+  if ($ustart_time != '' && $uend_time != '') 
+  {
+       return floor(($uend_time - $ustart_time) / 86400);
+  }
+  else 
+  {
+    return 0;
+  }
+}
+
+function Advertisement_block_content() {
+
+}
+
+function Advertisement_node_view($node, $view_mode) {
+	
+
+}
